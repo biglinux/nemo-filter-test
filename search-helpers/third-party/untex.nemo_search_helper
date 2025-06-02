@@ -1,0 +1,5 @@
+[Nemo Search Helper]
+TryExec=untex;
+Exec=untex %s
+MimeType=text/x-tex;
+Priority=100

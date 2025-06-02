@@ -1,0 +1,17 @@
+[Nemo Action]
+
+Name=Add Desklets
+
+Comment=Add Cinnamon desklets
+
+Exec=cinnamon-settings desklets
+
+Selection=None
+
+Extensions=any;
+
+Icon-Name=cs-desklets-symbolic
+
+Dependencies=cinnamon-settings;
+
+Conditions=desktop;dbus org.Cinnamon;

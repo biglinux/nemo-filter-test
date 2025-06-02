@@ -1,0 +1,101 @@
+[Nemo Action]
+
+Name=Add Desklets
+
+Comment=Add Cinnamon desklets
+
+Exec=cinnamon-settings desklets
+
+Selection=None
+
+Extensions=any;
+
+Icon-Name=cs-desklets-symbolic
+
+Dependencies=cinnamon-settings;
+
+Conditions=desktop;dbus org.Cinnamon;
+Name[af]=Voeg Desklets By
+Name[am]=ዴስክሌትስ መጨመሪያ
+Name[ar]=إضافة تطبيق مكتبي
+Name[be]=Дадаць дэсклеты
+Name[bg]=Добавяне на десклети
+Name[bn]=ডেস্কলেট যুক্ত করুন
+Name[br]=Ouzhpennañ arloadigoù burev
+Name[bs]=Dodaj Desklet-e
+Name[ca]=Afegeix miniaplicacions d'escriptori
+Name[cs]=Přidat miniaplikace plochy
+Name[cy]=Ychwanegu Desgledi
+Name[da]=Tilføj skrivebordsprogrammer
+Name[de]=Desklets hinzufügen
+Name[el]=Προσθήκη εφαρμογών οθόνης
+Name[en_AU]=Add Desklets
+Name[en_GB]=Add Desklets
+Name[eo]=Aldoni labortablaĵojn
+Name[es]=Añadir miniaplicaciones al escritorio
+Name[et]=Lisa töölauavidinaid
+Name[eu]=Gehitu desklet-ak
+Name[fa]=افزودن رومیزی‌ها
+Name[fi]=Lisää työpöytäsovelmia
+Name[fr]=Ajouter des desklets
+Name[fr_CA]=Ajouter des desklets
+Name[ga]=Cuir le Deiscíní
+Name[gd]=Cuir desktlets ris
+Name[gl]=Engadir trebellos
+Name[he]=הוספת יישומונים
+Name[hi]=डेस्क्लेट जोड़ें
+Name[hr]=Dodaj desklete
+Name[hu]=Asztalkalmazások hozzáadása
+Name[ia]=Adder desklets
+Name[id]=Tambah Desklet
+Name[is]=Bæta við skjáborðsgræjum (desklets)
+Name[it]=Aggiungi desklet
+Name[ja]=デスクレットを追加
+Name[jv]=Kabeh Desklet
+Name[kab]=Rnu isnasen n tnarit
+Name[ko]=데스크릿 추가
+Name[la]=Desklet Adde
+Name[lt]=Pridėti ekrano programėles
+Name[mo]=Адэугаря десклетурилор
+Name[ms]=Tambah Desklet
+Name[nb]=Legg til skrivebordsprogrammer
+Name[nl]=Bureaubladmini's toevoegen
+Name[nn]=Legg til miniprogram
+Name[pl]=Dodaj desklety
+Name[pt]=Adicionar Mini-aplicações
+Name[pt_BR]=Adicionar desklets
+Name[ro]=Adaugă deskleturi
+Name[ru]=Добавить десклеты
+Name[sk]=Pridať Desklet
+Name[sl]=Dodaj aplete namizja
+Name[sr]=Додај справице
+Name[sr@latin]=Dodajte desklete
+Name[sv]=Lägg till skrivbordsprogram
+Name[tg]=Илова кардани барномаҳои мизи корӣ
+Name[th]=เพิ่มเดสก์เล็ต
+Name[tr]=Masaüstü Uygulamacıkları Ekle
+Name[uk]=Додати десклети
+Name[ur]=ڈیسک لیٹ شامل کریں
+Name[uz]=Deskletlarni qo‘shish
+Name[vi]=Thêm Desklet
+Name[zh_CN]=添加桌面小工具
+Name[zh_HK]=新增桌面小工具
+Name[zh_TW]=加入桌面小程式
+Comment[ca]=Afegeix miniaplicacions de Cinnamon
+Comment[cs]=Přidat Cinnamon desklety
+Comment[cy]=Ychwanegu desgledau Cinnamon
+Comment[da]=Tilføj Cinnamon-skrivebordsprogrammer
+Comment[de]=Cinnamon-Desklets hinzufügen
+Comment[en_GB]=Add Cinnamon desklets
+Comment[es]=Añadir desklets de Cinnamon
+Comment[fi]=Lisää Cinnamon sovelmia
+Comment[fr]=Ajouter des desklets Cinnamon
+Comment[it]=Aggiungi desklet di Cinnamon
+Comment[nl]=Bureaubladmini's van Cinnamon toevoegen
+Comment[pl]=Dodaj desklety Cinnamona
+Comment[pt]=Adicionar desklets do Cinnamon
+Comment[pt_BR]=Adicionar desklets do Cinnamon
+Comment[ro]=Adaugă deskleturi Cinnamon
+Comment[sk]=Pridať desklety prostredia Cinnamon
+Comment[sv]=Lägg till skrivbordsprogram för Cinnamon
+Comment[zh_CN]=添加Cinnamon桌面小程序
