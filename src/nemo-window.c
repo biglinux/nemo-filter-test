@@ -48,7 +48,6 @@
 #include "nemo-icon-view.h"
 #include "nemo-list-view.h"
 #include "nemo-statusbar.h"
-#include "nemo-icon-container.h" // Added for filter
 #include "nemo-icon-view-container.h" // Added for filter
 #include "nemo-list-model.h" // Added for filter
 
@@ -76,8 +75,6 @@ extern NemoIcon *nemo_icon_container_lookup_icon_by_file(NemoIconContainer *cont
 #include <libnemo-private/nemo-undo.h>
 #include <libnemo-private/nemo-search-directory.h>
 #include <libnemo-private/nemo-signaller.h>
-#include <libnemo-private/nemo-icon-private.h> // Added for filter (NemoIcon struct)
-#include <libnemo-private/nemo-icon-canvas-item.h> // Added for filter
 
 #define DEBUG_FLAG NEMO_DEBUG_WINDOW
 #include <libnemo-private/nemo-debug.h>
@@ -95,24 +92,12 @@ static guint mouse_back_button = 8;
 
 /* --- BEGIN FILTER FORWARD DECLARATIONS & HELPERS --- */
 static void on_filter_entry_changed (GtkEntry *entry, gpointer user_data);
-static void on_filter_entry_apply (GtkEntry *entry, NemoWindow *window);
-static gboolean on_filter_debounce_timeout (gpointer user_data);
 static gboolean should_file_be_visible_in_filter (NemoWindow *window, NemoFile *file);
 static gboolean set_icon_filtered_state(NemoIconContainer *container, NemoIcon *icon, gboolean should_be_visible);
-static int apply_filter_to_icon_container(NemoIconContainer *container, NemoWindow *window, GList *all_files, guint *out_visible_folders, guint *out_visible_files);
+static int apply_filter_to_icon_container(NemoIconContainer *container, NemoWindow *window, guint *out_visible_folders, guint *out_visible_files);
 static void ensure_selection_visible_and_focused (NemoView *view);
 static void focus_first_visible_icon (NemoIconContainer *container);
 static gboolean is_navigation_key(GdkEventKey *event);
-
-/* Function declared in nemo-view.c but declared static there, so we need a wrapper */
-static void
-nemo_view_reveal_selection (NemoView *view)
-{
-	if (NEMO_IS_VIEW(view) && NEMO_VIEW_GET_CLASS(view)->reveal_selection) {
-		NEMO_VIEW_GET_CLASS(view)->reveal_selection(view);
-	}
-}
-/* --- END FILTER FORWARD DECLARATIONS & HELPERS --- */
 
 
 static void mouse_back_button_changed		     (gpointer                  callback_data);
@@ -186,6 +171,7 @@ static const struct {
 	{ XF86XK_ZoomOut,	NEMO_ACTION_ZOOM_OUT },
 	{ XF86XK_Back,		NEMO_ACTION_BACK },
 	{ XF86XK_Forward,	NEMO_ACTION_FORWARD }
+
 #endif
 };
 
@@ -295,7 +281,7 @@ update_cursor (NemoWindow *window)
 	slot = nemo_window_get_active_slot (window);
 
 	if (slot && slot->allow_stop) {
-		cursor = gdk_cursor_new_for_display(gtk_widget_get_display(GTK_WIDGET(window)), GDK_WATCH);
+		cursor = gdk_cursor_new (GDK_WATCH);
 		gdk_window_set_cursor (gtk_widget_get_window (GTK_WIDGET (window)), cursor);
 		g_object_unref (cursor);
 	} else {
@@ -415,43 +401,6 @@ save_sidebar_width_cb (gpointer user_data)
 				window->details->side_pane_width);
 
 	return FALSE;
-}
-
-static gboolean
-deferred_focus_active_view_idle_cb (NemoWindow *window)
-{
-	NemoWindowSlot *active_slot;
-	NemoView *active_view;
-
-	g_return_val_if_fail(NEMO_IS_WINDOW(window), G_SOURCE_REMOVE);
-
-	active_slot = nemo_window_get_active_slot(window);
-	if (active_slot && active_slot->content_view) {
-		active_view = active_slot->content_view;
-		if (gtk_widget_get_realized(GTK_WIDGET(active_view)) &&
-			gtk_widget_get_visible(GTK_WIDGET(active_view)) &&
-			gtk_widget_get_can_focus(GTK_WIDGET(active_view))) {
-
-			// Only try to focus if the filter entry doesn't currently have focus
-			if (!window->details->filter_entry || !gtk_widget_has_focus(GTK_WIDGET(window->details->filter_entry))) {
-				DEBUG("Deferred focus: Ensuring selection visible and focused for view %p", active_view);
-				ensure_selection_visible_and_focused(active_view);
-			} else {
-				DEBUG("Deferred focus: Filter entry has focus, not changing to view %p", active_view);
-			}
-		} else {
-			DEBUG("Deferred focus: View %p not ready for focus (realized: %d, visible: %d, can_focus: %d)",
-				  active_view,
-				  gtk_widget_get_realized(GTK_WIDGET(active_view)),
-				  gtk_widget_get_visible(GTK_WIDGET(active_view)),
-				  gtk_widget_get_can_focus(GTK_WIDGET(active_view)));
-		}
-	} else {
-		DEBUG("Deferred focus: No active slot or content view.");
-	}
-
-	g_object_unref(window); // Corresponds to g_object_ref when scheduling
-	return G_SOURCE_REMOVE;
 }
 
 /* side pane helpers */
@@ -790,8 +739,6 @@ nemo_window_constructed (GObject *self)
 	gtk_entry_set_placeholder_text(GTK_ENTRY(window->details->filter_entry), _("Filter files..."));
 	gtk_widget_set_hexpand(window->details->filter_entry, TRUE);
 	g_signal_connect(window->details->filter_entry, "changed", G_CALLBACK(on_filter_entry_changed), window);
-	// Optionally add an icon to the entry for visual cue / clear button
-	// gtk_entry_set_icon_from_icon_name(GTK_ENTRY(window->details->filter_entry), GTK_ENTRY_ICON_PRIMARY, "edit-find-symbolic");
 	gtk_box_pack_start(GTK_BOX(filter_box), window->details->filter_entry, TRUE, TRUE, 0);
 	gtk_widget_show(window->details->filter_entry);
 
@@ -964,12 +911,6 @@ nemo_window_finalize (GObject *object)
 										  window);
 
 	clear_menu_hide_delay (window);
-
-	/* --- BEGIN FILTER CLEANUP --- */
-	g_clear_pointer (&window->details->filter_text, g_free);
-	/* filter_entry and filter_results_label are GtkWidgets,
-	   their destruction is handled by GTK when the window is destroyed. */
-	/* --- END FILTER CLEANUP --- */
 
 	nemo_window_finalize_menus (window);
 
@@ -1193,10 +1134,7 @@ nemo_window_set_active_slot (NemoWindow *window, NemoWindowSlot *new_slot)
 		real_set_active_pane (window, new_slot->pane);
 	}
 
-	if (window->details->active_pane) { // active_pane might be NULL if window is closing
 		window->details->active_pane->active_slot = new_slot;
-	}
-
 
 	/* make new slot active, if it exists */
 	if (new_slot) {
@@ -1219,15 +1157,6 @@ nemo_window_set_active_slot (NemoWindow *window, NemoWindowSlot *new_slot)
 
 		/* inform slot & view */
 		g_signal_emit_by_name (new_slot, "active");
-
-		/* If filter is active, re-apply it to the new slot's view */
-		if (window->details->filter_entry && gtk_entry_get_text_length(GTK_ENTRY(window->details->filter_entry)) > 0) {
-			on_filter_entry_changed(GTK_ENTRY(window->details->filter_entry), window);
-		}
-		if (new_slot && new_slot->content_view) {
-			// Schedule the focus attempt
-			g_idle_add((GSourceFunc)deferred_focus_active_view_idle_cb, g_object_ref(window));
-		}
 	}
 }
 
@@ -1874,8 +1803,7 @@ nemo_window_connect_content_view (NemoWindow *window,
 		nemo_window_sync_view_type (window);
 	}
 
-	// nemo_view_grab_focus (view); // OLD LINE
-	ensure_selection_visible_and_focused (view); // NEW LINE: Ensures selection and focus
+	nemo_view_grab_focus (view);
 }
 
 void
@@ -1920,7 +1848,7 @@ nemo_window_show (GtkWidget *widget)
 	}
 
 	GTK_WIDGET_CLASS (nemo_window_parent_class)->show (widget);
-   g_idle_add((GSourceFunc)deferred_focus_active_view_idle_cb, g_object_ref(window));
+   g_idle_add((GSourceFunc)focus_first_visible_icon, g_object_ref(window));
 	gtk_ui_manager_ensure_update (window->details->ui_manager);
 }
 
@@ -2009,13 +1937,7 @@ nemo_window_slot_set_viewed_file (NemoWindowSlot *slot,
 		if (window->details->filter_entry) {
 			const gchar *current_filter_text = gtk_entry_get_text(GTK_ENTRY(window->details->filter_entry));
 			if (current_filter_text && current_filter_text[0] != '\0') {
-				// Only clear if the new location is a directory or null (i.e., not a file preview)
-				gboolean new_location_is_folder_or_null = (file == NULL || (NEMO_IS_FILE(file) && nemo_file_is_directory(file)));
-				if (new_location_is_folder_or_null) {
-					 DEBUG("Clearing filter as viewed file/location changed.");
 					 gtk_entry_set_text(GTK_ENTRY(window->details->filter_entry), "");
-					 // on_filter_entry_changed will be triggered by set_text
-				}
 			}
 		}
 	}
@@ -2299,12 +2221,6 @@ nemo_window_init (NemoWindow *window)
 	window->details->ignore_meta_sort_column = NULL;
 	window->details->ignore_meta_sort_direction = SORT_NULL;
 
-	/* --- BEGIN FILTER INIT --- */
-	window->details->filter_entry = NULL;
-	window->details->filter_results_label = NULL;
-	window->details->filter_text = NULL;
-	/* --- END FILTER INIT --- */
-
 	/* This makes it possible for GTK+ themes to apply styling that is specific to Nemo
 	 * without affecting other GTK+ applications.
 	 */
@@ -2452,7 +2368,8 @@ nemo_window_class_init (NemoWindowClass *class)
 				  G_TYPE_NONE, 1, NEMO_TYPE_WINDOW_SLOT);
 
 	binding_set = gtk_binding_set_by_class (class);
-
+	gtk_binding_entry_add_signal (binding_set, GDK_KEY_BackSpace, 0,
+				      "go-up", 0);
 	gtk_binding_entry_add_signal (binding_set, GDK_KEY_F5, 0,
 					  "reload", 0);
 	gtk_binding_entry_add_signal (binding_set, GDK_KEY_slash, 0,
@@ -2749,210 +2666,191 @@ should_file_be_visible_in_filter (NemoWindow *window, NemoFile *file)
 }
 
 static gboolean
-set_icon_filtered_state(NemoIconContainer *container,
-						NemoIcon *icon,
-						gboolean should_be_visible)
+set_icon_filtered_state(NemoIconContainer *container, // Added container argument
+                        NemoIcon *icon,
+                        gboolean should_be_visible)
 {
-	gboolean state_changed = FALSE;
-	gboolean is_currently_filtered_out; // Renamed for clarity
+    gboolean state_changed = FALSE;
+    gboolean is_currently_filtered_out;
 
-	g_return_val_if_fail(container != NULL, FALSE);
-	g_return_val_if_fail(icon != NULL, FALSE);
+    g_return_val_if_fail(container != NULL, FALSE); // Add assertion
+    g_return_val_if_fail(icon != NULL, FALSE);
 
-	if (icon->item == NULL) {
-		return FALSE;
-	}
+    if (icon->item == NULL) {
+        return FALSE;
+    }
 
+    // Update NemoIcon's own visibility flag (used by other parts of Nemo potentially)
+    icon->is_visible = should_be_visible;
 
-	// Update NemoIcon's own visibility and filter state
-	icon->is_visible = should_be_visible;
-	icon->is_filtered_out = !should_be_visible;
+    // Check if the icon is currently marked as filtered out for canvas purposes
+    is_currently_filtered_out = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(icon->item), "filtered-out"));
 
-	// Check if the icon is currently marked as filtered out for canvas purposes
-	is_currently_filtered_out = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(icon->item), "filtered-out"));
+    if (is_currently_filtered_out == should_be_visible) { // Note: 'filtered-out' is inverse of 'should_be_visible'
+        state_changed = TRUE;
+        g_object_set_data(G_OBJECT(icon->item), "filtered-out", GINT_TO_POINTER(!should_be_visible));
 
-	if (is_currently_filtered_out == should_be_visible) { // Note: 'filtered-out' is inverse of 'should_be_visible'
-		state_changed = TRUE;
-		g_object_set_data(G_OBJECT(icon->item), "filtered-out", GINT_TO_POINTER(!should_be_visible));
-
-		if (should_be_visible) {
-			eel_canvas_item_show(EEL_CANVAS_ITEM(icon->item));
-		} else {
-			eel_canvas_item_hide(EEL_CANVAS_ITEM(icon->item));
-		}
-		// eel_canvas_item_request_redraw(EEL_CANVAS_ITEM(icon->item)); // Handled by container update
-	}
-	return state_changed;
+        if (should_be_visible) {
+            eel_canvas_item_show(EEL_CANVAS_ITEM(icon->item));
+        } else {
+            eel_canvas_item_hide(EEL_CANVAS_ITEM(icon->item));
+        }
+    }
+    return state_changed;
 }
 
 static int
 apply_filter_to_icon_container(NemoIconContainer *container,
-							  NemoWindow *window,
-							  GList *all_files, // All files in the current directory
-							  guint *out_visible_folders,
-							  guint *out_visible_files)
+                              NemoWindow *window,
+                              // GList *all_files_in_dir, // REMOVED
+                              guint *out_visible_folders,
+                              guint *out_visible_files)
 {
-	GList *l;
-	int visible_item_count = 0;
-	gboolean needs_relayout = FALSE;
-	NemoIcon *icon_obj; // Renamed to avoid conflict with type NemoIcon
+    GList *l;
+    int visible_item_count = 0;
+    gboolean needs_relayout = FALSE;
+    NemoIcon *icon_obj; // Renamed from icon to avoid conflict with type NemoIcon
 
-	g_return_val_if_fail(NEMO_IS_ICON_CONTAINER(container), 0);
-	g_return_val_if_fail(NEMO_IS_WINDOW(window), 0);
+    g_return_val_if_fail(NEMO_IS_ICON_CONTAINER(container), 0);
+    g_return_val_if_fail(NEMO_IS_WINDOW(window), 0);
 
-	if (out_visible_folders) *out_visible_folders = 0;
-	if (out_visible_files) *out_visible_files = 0;
+    if (out_visible_folders) *out_visible_folders = 0;
+    if (out_visible_files) *out_visible_files = 0;
 
-	if (all_files == NULL) {
-		// If no files, ensure canvas is empty or reflects this
-		nemo_icon_container_request_update_all(container); // Force relayout
-		return 0;
-	}
+    // Iterate through the icons already in the container
+    for (l = container->details->icons; l != NULL; l = l->next) {
+        icon_obj = l->data;
+        if (!icon_obj || !icon_obj->item) { // Ensure icon and its canvas item exist
+            continue;
+        }
 
-	// Iterate all files that *should* be in the directory
-	for (l = all_files; l != NULL; l = l->next) {
-		NemoFile *file = NEMO_FILE(l->data);
-		if (!file) continue;
+        NemoFile *file = NEMO_FILE(icon_obj->data); // Get the NemoFile from the NemoIcon
+        if (!file) continue;
 
-		icon_obj = nemo_icon_container_lookup_icon_by_file(container, file);
-		if (!icon_obj || !icon_obj->item) {
-			// Icon might not be created yet if files were just added or view is loading.
-			// The container will handle creating/showing it if it matches.
-			// For existing icons, we manage their filtered state.
-			continue;
-		}
+        gboolean should_be_visible = should_file_be_visible_in_filter(window, file);
 
-		gboolean should_be_visible = should_file_be_visible_in_filter(window, file);
+        // Pass container to set_icon_filtered_state
+        if (set_icon_filtered_state(container, icon_obj, should_be_visible)) {
+            needs_relayout = TRUE;
+        }
 
-		if (set_icon_filtered_state(container, icon_obj, should_be_visible)) {
-			needs_relayout = TRUE;
-		}
+        if (should_be_visible) {
+            visible_item_count++;
+            if (out_visible_folders && out_visible_files) {
+                if (nemo_file_is_directory(file)) {
+                    (*out_visible_folders)++;
+                } else {
+                    (*out_visible_files)++;
+                }
+            }
+        }
+    }
 
-		if (should_be_visible) {
-			visible_item_count++;
-			if (out_visible_folders && out_visible_files) {
-				if (nemo_file_is_directory(file)) {
-					(*out_visible_folders)++;
-				} else {
-					(*out_visible_files)++;
-				}
-			}
-		}
-	}
-
-	if (needs_relayout) {
-		nemo_icon_container_request_update_all(container); // This should handle relayout and redraw
-	}
-	return visible_item_count;
+    if (needs_relayout) {
+        nemo_icon_container_request_update_all(container);
+    }
+    return visible_item_count;
 }
 
 
 static void
 on_filter_entry_changed (GtkEntry *entry, gpointer user_data)
 {
-	NemoWindow *window = NEMO_WINDOW (user_data);
-	/* Debounce rapid changes */
-	if (window->details->filter_debounce_timer_id) {
-		g_source_remove (window->details->filter_debounce_timer_id);
-	}
-	window->details->filter_debounce_timer_id =
-		g_timeout_add (100, on_filter_debounce_timeout, window);
-}
+    NemoWindow *window = NEMO_WINDOW (user_data);
+    const gchar *text = gtk_entry_get_text (entry);
+    NemoWindowSlot *slot;
+    NemoView *active_view;
+    guint visible_files_count = 0;
+    guint visible_folders_count = 0;
 
-/* Apply the filter logic after debounce timeout */
-static gboolean
-on_filter_debounce_timeout (gpointer user_data)
-{
-	NemoWindow *window = NEMO_WINDOW (user_data);
-	GtkEntry *entry = GTK_ENTRY (window->details->filter_entry);
-	on_filter_entry_apply (entry, window);
-	window->details->filter_debounce_timer_id = 0;
-	return FALSE; /* One-shot */
-}
+    DEBUG ("Filter: Text changed to: '%s'", text ? text : "(null)");
 
-static void
-on_filter_entry_apply (GtkEntry *entry, NemoWindow *window)
-{
-	const gchar *text = gtk_entry_get_text (entry);
-	NemoWindowSlot *slot;
-	NemoView *active_view;
-	guint visible_files_count = 0;
-	guint visible_folders_count = 0;
+    g_clear_pointer (&window->details->filter_text, g_free);
+    if (text && text[0] != '\0') {
+        window->details->filter_text = g_utf8_strdown (text, -1);
+    } else {
+        window->details->filter_text = NULL; // Cleared
+    }
 
-	DEBUG ("Filter: Text changed to: '%s'", text ? text : "(null)");
+    slot = nemo_window_get_active_slot (window);
+    if (!slot) {
+        DEBUG("Filter: No active slot!");
+        return;
+    }
+    active_view = nemo_window_slot_get_current_view (slot);
+    if (!active_view) {
+        DEBUG("Filter: No current view in active slot!");
+        return;
+    }
 
-	g_clear_pointer (&window->details->filter_text, g_free);
-	if (text && text[0] != '\0') {
-		window->details->filter_text = g_utf8_strdown (text, -1);
-	} else {
-		window->details->filter_text = NULL;
-	}
+    if (NEMO_IS_LIST_VIEW (active_view)) {
+        DEBUG("Filter: Handling List View.");
+        NemoListView *list_view = NEMO_LIST_VIEW(active_view);
+        GtkTreeView *tree_view = nemo_list_view_get_tree_view(list_view);
+        NemoListModel *list_model = NEMO_LIST_MODEL(gtk_tree_view_get_model(tree_view));
+        NemoDirectory *directory = nemo_view_get_model(active_view); // Still need this for List View
+        GList *all_files_in_dir = NULL;
 
-	slot = nemo_window_get_active_slot (window);
-	if (!slot) {
-		DEBUG ("Filter: No active slot!");
-		return;
-	}
-	active_view = nemo_window_slot_get_current_view (slot);
-	if (!active_view) {
-		DEBUG ("Filter: No current view in active slot!");
-		return;
-	}
+        if (directory) {
+             all_files_in_dir = nemo_directory_get_file_list(directory);
+        }
 
-	NemoDirectory *directory = nemo_view_get_model (active_view);
-	if (!directory) {
-		DEBUG ("Filter: Could not get directory model for the active view.");
-		return;
-	}
-	GList *all_files_in_dir = nemo_directory_get_file_list (directory);
 
-	if (NEMO_IS_LIST_VIEW (active_view)) {
-		/* List view filtering logic unchanged */
-		/* ... existing list view code ... */
-	} else if (NEMO_IS_ICON_VIEW (active_view)) {
-		DEBUG ("Filter: Handling Icon View.");
-		NemoIconView *icon_view_instance = NEMO_ICON_VIEW (active_view);
-		NemoIconContainer *icon_container =
-			nemo_icon_view_get_icon_container (icon_view_instance);
+        if (!NEMO_IS_LIST_MODEL(list_model)) {
+            DEBUG("Filter: List View model is not NemoListModel.");
+            if (all_files_in_dir) nemo_file_list_free(all_files_in_dir);
+            return;
+        }
 
-		if (NEMO_IS_ICON_CONTAINER (icon_container)) {
-			apply_filter_to_icon_container (icon_container,
-										   window,
-										   all_files_in_dir,
-										   &visible_folders_count,
-										   &visible_files_count);
-		} else {
-			DEBUG ("Filter: IconContainer is NULL for IconView.");
-		}
-	} else {
-		DEBUG ("Filter: Active view type %s is not handled.",
-			   G_OBJECT_TYPE_NAME (active_view));
-	}
+        nemo_list_model_clear(list_model); // Clear current items
 
-	if (all_files_in_dir) {
-		nemo_file_list_free (all_files_in_dir);
-	}
+        if (all_files_in_dir) {
+            GList *iter_files;
+            for (iter_files = all_files_in_dir; iter_files != NULL; iter_files = iter_files->next) {
+                NemoFile *file = NEMO_FILE(iter_files->data);
+                if (should_file_be_visible_in_filter(window, file)) {
+                    // For list model, we need to pass the directory context
+                    nemo_list_model_add_file(list_model, file, directory);
+                    if (nemo_file_is_directory(file)) {
+                        visible_folders_count++;
+                    } else {
+                        visible_files_count++;
+                    }
+                }
+            }
+            nemo_file_list_free(all_files_in_dir);
+        }
+    } else if (NEMO_IS_ICON_VIEW (active_view)) {
+        DEBUG("Filter: Handling Icon View.");
+        NemoIconView *icon_view_instance = NEMO_ICON_VIEW(active_view);
+        NemoIconContainer *icon_container = nemo_icon_view_get_icon_container(icon_view_instance);
 
-	/* Update results label */
-	if (window->details->filter_results_label) {
-		if (window->details->filter_text &&
-			window->details->filter_text[0] != '\0') {
-			char *results_text =
-				g_strdup_printf (_("%u folders, %u files match"),
-								 visible_folders_count,
-								 visible_files_count);
-			gtk_label_set_text (GTK_LABEL (window->details->filter_results_label),
-								results_text);
-			g_free (results_text);
-			gtk_widget_show (window->details->filter_results_label);
-		} else {
-			gtk_label_set_text (GTK_LABEL (window->details->filter_results_label), "");
-			gtk_widget_hide (window->details->filter_results_label);
-		}
-	}
+        if (NEMO_IS_ICON_CONTAINER(icon_container)) {
+            // Pass only the container and window now
+            apply_filter_to_icon_container(icon_container, window,
+                                           &visible_folders_count, &visible_files_count);
+        } else {
+            DEBUG("Filter: IconContainer is NULL for IconView.");
+        }
+    } else {
+        DEBUG("Filter: Active view type %s is not handled.", G_OBJECT_TYPE_NAME(active_view));
+    }
 
-	/* Ensure selection and focus after filtering */
-	ensure_selection_visible_and_focused (active_view);
+    // Update results label
+    if (window->details->filter_results_label) {
+        if (window->details->filter_text && window->details->filter_text[0] != '\0') {
+            char *results_text = g_strdup_printf(_("%u folders, %u files match"),
+                                               visible_folders_count, visible_files_count);
+            gtk_label_set_text(GTK_LABEL(window->details->filter_results_label), results_text);
+            g_free(results_text);
+            gtk_widget_show(window->details->filter_results_label);
+        } else {
+            gtk_label_set_text(GTK_LABEL(window->details->filter_results_label), "");
+            gtk_widget_hide(window->details->filter_results_label);
+        }
+    }
+
+    ensure_selection_visible_and_focused(active_view);
 }
 
 
@@ -2964,7 +2862,6 @@ ensure_selection_visible_and_focused(NemoView *view)
 	NemoWindow *window = nemo_view_get_nemo_window(view); // Get parent window
 	g_return_if_fail(window != NULL); // Should always have a window
 
-	nemo_view_reveal_selection(view);
 
 	if (NEMO_IS_LIST_VIEW(view)) {
 		NemoListView *list_view = NEMO_LIST_VIEW(view);
@@ -3048,7 +2945,6 @@ focus_first_visible_icon (NemoIconContainer *container)
 		}
 	}
 
-	nemo_icon_container_unselect_all(container); // Clear previous selection
 
 	if (first_visible_icon && first_visible_file) {
 		GList *sel_list = g_list_append(NULL, nemo_file_ref(first_visible_file));
@@ -3057,8 +2953,6 @@ focus_first_visible_icon (NemoIconContainer *container)
 
 		nemo_icon_container_scroll_to_icon(container, first_visible_icon->data);
 		eel_canvas_item_grab_focus(EEL_CANVAS_ITEM(first_visible_icon->item));
-	} else {
-		eel_canvas_item_grab_focus(NULL); // No item to focus
 	}
 
 	if (all_files) {

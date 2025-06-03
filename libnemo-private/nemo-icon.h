@@ -30,12 +30,12 @@
 #include <libnemo-private/nemo-icon-container.h>
 
 #define NEMO_ICON_CONTAINER_ICON_DATA(pointer) \
-	((NemoIconData *) (pointer))
+    ((NemoIconData *) (pointer))
 
 typedef struct NemoIconData NemoIconData;
 
 typedef void (* NemoIconCallback) (NemoIconData *icon_data,
-					   gpointer callback_data);
+                       gpointer callback_data);
 
 /* An Icon. */
 
@@ -67,12 +67,11 @@ typedef struct {
 	eel_boolean_bit was_selected_before_rubberband : 1;
 
 	/* Whether this item is visible in the view. */
-	gboolean is_visible;        /* visibility state (overall) */
-	gboolean is_filtered_out;   /* filter state (specifically due to filtering) */
+	eel_boolean_bit is_visible : 1;
 
 	eel_boolean_bit has_lazy_position : 1;
 
-	eel_boolean_bit ok_to_show_thumb : 1;
+    eel_boolean_bit ok_to_show_thumb : 1;
 } NemoIcon;
 
 #endif /* NEMO_ICON_CONTAINER_PRIVATE_H */

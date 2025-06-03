@@ -120,9 +120,6 @@ struct NemoWindowDetails
         gchar *ignore_meta_sort_column;
         gint ignore_meta_sort_direction;
 
-        /* Timer ID for debouncing filter entry changes */
-        guint filter_debounce_timer_id;
-
         gboolean dynamic_menu_entries_current;
 };
 

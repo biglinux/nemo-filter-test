@@ -33,6 +33,7 @@
 #include <gio/gio.h>
 #include <eel/eel-glib-extensions.h>
 #include "nemo-icon-private.h"
+#include "nemo-window-private.h"
 #include <libnemo-private/nemo-global-preferences.h>
 #include <libnemo-private/nemo-file-attributes.h>
 #include <libnemo-private/nemo-metadata.h>
@@ -730,11 +731,44 @@ lay_down_icons_horizontal (NemoIconContainer *container,
     GtkAllocation allocation;
     gint icon_size, text_size, use_size;
 
-    g_assert (NEMO_IS_ICON_CONTAINER (container));
+    // --- BEGIN MODIFICATION ---
+    GList *icons_to_layout;
+    GList *allocated_visible_icons_list = NULL;
+    NemoWindow *window = nemo_view_get_nemo_window(NEMO_VIEW(get_icon_view(container)));
 
-    if (icons == NULL) {
+    if (window && window->details->filter_text && window->details->filter_text[0] != '\0') {
+        // Filter is active, build the filtered list
+        GList *p_filter;
+        NemoIcon *icon_filter;
+        for (p_filter = icons; p_filter != NULL; p_filter = p_filter->next) {
+            icon_filter = p_filter->data;
+            if (icon_should_be_visible_in_layout(icon_filter)) {
+                allocated_visible_icons_list = g_list_append(allocated_visible_icons_list, icon_filter);
+            }
+        }
+        if (allocated_visible_icons_list == NULL && icons != NULL) {
+             // No icons visible after filtering, but original list was not empty
+             return;
+        }
+        icons_to_layout = allocated_visible_icons_list;
+    } else {
+        // No filter active, or window context not available
+        icons_to_layout = icons;
+    }
+
+    /* If there are no icons to lay out, return early */
+    if (icons_to_layout == NULL) {
+        if (allocated_visible_icons_list != NULL) {
+             g_list_free(allocated_visible_icons_list); // Free the list structure, not the data
+        }
         return;
     }
+    // --- END MODIFICATION ---
+
+
+    g_assert (NEMO_IS_ICON_CONTAINER (container));
+
+    // The original: if (icons == NULL) return; is now covered by icons_to_layout == NULL check.
 
     positions = g_array_new (FALSE, FALSE, sizeof (NemoCanvasRects));
     gtk_widget_get_allocation (GTK_WIDGET (container), &allocation);
@@ -751,29 +785,16 @@ lay_down_icons_horizontal (NemoIconContainer *container,
     device_canvas_width = floor (canvas_width * ppu);
     icon_size = nemo_get_icon_size_for_zoom_level (container->details->zoom_level);
     text_size = nemo_get_icon_text_width_for_zoom_level (container->details->zoom_level);
-    
-    /* Filter out invisible icons */
-    GList *visible_icons = NULL;
-    for (p = icons; p != NULL; p = p->next) {
-        icon = p->data;
-        if (icon_should_be_visible_in_layout(icon)) {
-            visible_icons = g_list_append(visible_icons, icon);
-        }
-    }
-    
-    /* If there are no visible icons after filtering, return early */
-    if (visible_icons == NULL) {
-        return;
-    }
-    
-    /* Continue with the visible icons only */
-    icons = visible_icons;
+
+    // Original filtering loop is removed.
+    // The subsequent logic now uses icons_to_layout.
 
     use_size = MAX (icon_size, text_size) + 15;
     icon_size /= ppu;
     if (container->details->label_position == NEMO_ICON_LABEL_POSITION_BESIDE) {
         /* Would it be worth caching these bounds for the next loop? */
-        for (p = icons; p != NULL; p = p->next) {
+        // Use icons_to_layout here
+        for (p = icons_to_layout; p != NULL; p = p->next) {
             icon = p->data;
 
             icon_bounds = nemo_icon_canvas_item_get_icon_rectangle (icon->item);
@@ -793,11 +814,13 @@ lay_down_icons_horizontal (NemoIconContainer *container,
     }
 
     line_width = container->details->label_position == NEMO_ICON_LABEL_POSITION_BESIDE ? column_gap : 0;
-    line_start = icons;
+    // Use icons_to_layout here
+    line_start = icons_to_layout;
     y = start_y + row_gap;
     i = 0;
 
-    for (p = icons; p != NULL; p = p->next) {
+    // Use icons_to_layout here
+    for (p = icons_to_layout; p != NULL; p = p->next) {
         icon = p->data;
 
         if (container->details->fixed_text_height == -1) {
@@ -865,6 +888,13 @@ lay_down_icons_horizontal (NemoIconContainer *container,
     }
 
     g_array_free (positions, TRUE);
+
+    // --- BEGIN MODIFICATION ---
+    // Free the temporary list if it was created
+    if (allocated_visible_icons_list != NULL) {
+        g_list_free(allocated_visible_icons_list); // Free the list structure, not the data
+    }
+    // --- END MODIFICATION ---
 }
 
 /* column-wise layout. At the moment, this only works with label-beside-icon (used by "Compact View"). */
@@ -899,12 +929,44 @@ lay_down_icons_vertical (NemoIconContainer *container,
     int height;
     int i;
 
+    // --- BEGIN MODIFICATION ---
+    GList *icons_to_layout;
+    GList *allocated_visible_icons_list = NULL;
+    NemoWindow *window = nemo_view_get_nemo_window(NEMO_VIEW(get_icon_view(container)));
+
+    if (window && window->details->filter_text && window->details->filter_text[0] != '\0') {
+        // Filter is active, build the filtered list
+        GList *p_filter;
+        NemoIcon *icon_filter;
+        for (p_filter = icons; p_filter != NULL; p_filter = p_filter->next) {
+            icon_filter = p_filter->data;
+            if (icon_should_be_visible_in_layout(icon_filter)) {
+                allocated_visible_icons_list = g_list_append(allocated_visible_icons_list, icon_filter);
+            }
+        }
+        if (allocated_visible_icons_list == NULL && icons != NULL) {
+             // No icons visible after filtering, but original list was not empty
+             return;
+        }
+        icons_to_layout = allocated_visible_icons_list;
+    } else {
+        // No filter active, or window context not available
+        icons_to_layout = icons;
+    }
+
+    /* If there are no icons to lay out, return early */
+    if (icons_to_layout == NULL) {
+        if (allocated_visible_icons_list != NULL) {
+             g_list_free(allocated_visible_icons_list); // Free the list structure, not the data
+        }
+        return;
+    }
+    // --- END MODIFICATION ---
+
     g_assert (NEMO_IS_ICON_CONTAINER (container));
     g_assert (container->details->label_position == NEMO_ICON_LABEL_POSITION_BESIDE);
 
-    if (icons == NULL) {
-        return;
-    }
+    // Original: if (icons == NULL) return; is now covered by icons_to_layout == NULL check.
 
     ppu = EEL_CANVAS (container)->pixels_per_unit;
     gap = floor (ICON_TEXT_GAP / ppu);
@@ -919,27 +981,14 @@ lay_down_icons_vertical (NemoIconContainer *container,
     max_icon_height = max_text_height = 0.0;
     max_bounds_height = 0.0;
 
-    get_max_icon_dimensions (icons, NULL,
+    // Use icons_to_layout here
+    get_max_icon_dimensions (icons_to_layout, NULL,
                  &max_icon_width, &max_icon_height,
                  &max_text_width, &max_text_height,
                  &max_bounds_height);
-                 
-    /* Filter out invisible icons */
-    GList *visible_icons = NULL;
-    for (p = icons; p != NULL; p = p->next) {
-        icon = p->data;
-        if (icon_should_be_visible_in_layout(icon)) {
-            visible_icons = g_list_append(visible_icons, icon);
-        }
-    }
-    
-    /* If there are no visible icons after filtering, return early */
-    if (visible_icons == NULL) {
-        return;
-    }
-    
-    /* Continue with the visible icons only */
-    icons = visible_icons;
+
+    // Original filtering loop is removed.
+    // The subsequent logic now uses icons_to_layout.
 
     max_width = max_icon_width + max_text_width;
     max_height = MAX (max_icon_height, max_text_height);
@@ -948,13 +997,15 @@ lay_down_icons_vertical (NemoIconContainer *container,
     max_bounds_height_with_borders = gap + max_bounds_height;
 
     line_height = gap;
-    line_start = icons;
+    // Use icons_to_layout here
+    line_start = icons_to_layout;
     x = 0;
     i = 0;
 
     max_width_in_column = 0.0;
 
-    for (p = icons; p != NULL; p = p->next) {
+    // Use icons_to_layout here
+    for (p = icons_to_layout; p != NULL; p = p->next) {
         icon = p->data;
 
         /* If this icon doesn't fit, it's time to lay out the column that's queued up. */
@@ -969,8 +1020,9 @@ lay_down_icons_vertical (NemoIconContainer *container,
 
             /* correctly set (per-column) width */
             if (!container->details->all_columns_same_width) {
-                for (i = 0; i < (int) positions->len; i++) {
-                    position = &g_array_index (positions, NemoCanvasRects, i);
+                int j_pos; // Renamed to avoid conflict with loop variable i
+                for (j_pos = 0; j_pos < (int) positions->len; j_pos++) {
+                    position = &g_array_index (positions, NemoCanvasRects, j_pos);
                     position->width = max_width_in_column;
                 }
             }
@@ -1023,6 +1075,13 @@ lay_down_icons_vertical (NemoIconContainer *container,
     }
 
     g_array_free (positions, TRUE);
+
+    // --- BEGIN MODIFICATION ---
+    // Free the temporary list if it was created
+    if (allocated_visible_icons_list != NULL) {
+        g_list_free(allocated_visible_icons_list); // Free the list structure, not the data
+    }
+    // --- END MODIFICATION ---
 }
 
 static void
@@ -1203,6 +1262,7 @@ lay_down_icons_vertical_desktop (NemoIconContainer *container, GList *icons)
      * This should not be tied to the direction of layout.
      * It should be a separate switch.
      */
+    nemo_icon_container_freeze_icon_positions (container);
 }
 
 static void
@@ -1231,13 +1291,13 @@ nemo_icon_view_container_lay_down_icons (NemoIconContainer *container, GList *ic
 
 
 static void
-get_max_icon_dimensions (GList *icon_start,
-             GList *icon_end,
-             double *max_icon_width,
-             double *max_icon_height,
-             double *max_text_width,
-             double *max_text_height,
-             double *max_bounds_height)
+get_max_icon_dimensions (GList *icon_start, // This will be the full list of icons
+                         GList *icon_end,
+                         double *max_icon_width,
+                         double *max_icon_height,
+                         double *max_text_width,
+                         double *max_text_height,
+                         double *max_bounds_height)
 {
     NemoIcon *icon;
     EelDRect icon_bounds;
@@ -1249,9 +1309,14 @@ get_max_icon_dimensions (GList *icon_start,
     *max_icon_height = *max_text_height = 0.0;
     *max_bounds_height = 0.0;
 
-    /* Would it be worth caching these bounds for the next loop? */
     for (p = icon_start; p != icon_end; p = p->next) {
         icon = p->data;
+
+        // --- BEGIN MODIFICATION ---
+        if (!icon_should_be_visible_in_layout(icon)) { // Respect the "filtered-out" state
+            continue;
+        }
+        // --- END MODIFICATION ---
 
         icon_bounds = nemo_icon_canvas_item_get_icon_rectangle (icon->item);
         *max_icon_width = MAX (*max_icon_width, ceil (icon_bounds.x1 - icon_bounds.x0));
@@ -2235,10 +2300,6 @@ nemo_icon_view_container_set_sort_desktop (NemoIconViewContainer *container,
 static gboolean
 icon_should_be_visible_in_layout (NemoIcon *icon)
 {
-    if (icon == NULL || icon->item == NULL) {
-        return FALSE;
-    }
-    
     /* Check if the icon has been filtered out */
     gpointer filtered_data = g_object_get_data(G_OBJECT(icon->item), "filtered-out");
     gboolean is_filtered = (filtered_data != NULL && GPOINTER_TO_INT(filtered_data));

@@ -2561,30 +2561,8 @@ nemo_view_grab_focus (NemoView *view)
 	/* focus the child of the scrolled window if it exists */
 	GtkWidget *child;
 	child = gtk_bin_get_child (GTK_BIN (view));
-	
-	/* Make both the view and its child focusable */
-	gtk_widget_set_can_focus (GTK_WIDGET (view), TRUE);
-	
 	if (child) {
-		gtk_widget_set_can_focus (GTK_WIDGET (child), TRUE);
 		gtk_widget_grab_focus (GTK_WIDGET (child));
-		
-		/* For list view, make sure the tree view gets focus */
-		if (NEMO_IS_LIST_VIEW (view)) {
-			GtkTreeView *tree_view = nemo_list_view_get_tree_view (NEMO_LIST_VIEW (view));
-			if (tree_view) {
-				gtk_widget_set_can_focus (GTK_WIDGET (tree_view), TRUE);
-				gtk_widget_grab_focus (GTK_WIDGET (tree_view));
-			}
-		}
-		/* For icon view, make sure the icon container gets focus */
-		else if (NEMO_IS_ICON_VIEW (view)) {
-			NemoIconContainer *container = nemo_icon_view_get_icon_container (NEMO_ICON_VIEW (view));
-			if (container) {
-				gtk_widget_set_can_focus (GTK_WIDGET (container), TRUE);
-				gtk_widget_grab_focus (GTK_WIDGET (container));
-			}
-		}
 	}
 }
 

@@ -629,8 +629,6 @@ nemo_window_slot_set_content_view_widget (NemoWindowSlot *slot,
 
 	window = nemo_window_slot_get_window (slot);
 
-
-
 	if (slot->content_view != NULL) {
 		/* disconnect old view */
         g_signal_handlers_disconnect_by_func (slot->content_view, G_CALLBACK (view_end_loading_cb), slot);
