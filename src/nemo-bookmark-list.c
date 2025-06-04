@@ -691,9 +691,12 @@ load_bookmark_metadata_file (NemoBookmarkList *list)
         }
 
         g_strfreev (items);
-    } else if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT)) {
-        g_warning ("Could not load bookmark metadata file: %s\n", error->message);
-        g_error_free (error);
+    } else {
+        // error is guaranteed to be non-NULL here if loading failed.
+        if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT)) {
+            g_warning ("Could not load bookmark metadata file: %s\n", error->message);
+        }
+        g_error_free (error); // Always free the error if loading failed.
     }
 
     g_key_file_free (kfile);

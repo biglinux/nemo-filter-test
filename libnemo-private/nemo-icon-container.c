@@ -267,6 +267,17 @@ icon_free (NemoIcon *icon)
 {
 	/* Destroy this canvas item; the parent will unref it. */
 	eel_canvas_item_destroy (EEL_CANVAS_ITEM (icon->item));
+
+	// Add these lines to unreference the NemoIconInfo objects
+	if (icon->icon_info) {
+		nemo_icon_info_unref(icon->icon_info);
+		icon->icon_info = NULL;
+	}
+	if (icon->emblem_info) {
+		nemo_icon_info_unref(icon->emblem_info);
+		icon->emblem_info = NULL;
+	}
+
 	g_free (icon);
 }
 

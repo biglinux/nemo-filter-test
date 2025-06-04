@@ -554,25 +554,29 @@ void
 nemo_query_editor_set_query (NemoQueryEditor	*editor,
 				 NemoQuery		*query)
 {
-    gchar *file_pattern = NULL;
-    gchar *content_pattern = NULL;
+    gchar *file_pattern_to_set = NULL;
+    gchar *content_pattern_to_set = NULL;
+    gboolean free_file_pattern = FALSE;
+    gboolean free_content_pattern = FALSE;
 
     if (query != NULL) {
-        file_pattern = nemo_query_get_file_pattern (query);
-        content_pattern = nemo_query_get_content_pattern (query);
+        file_pattern_to_set = nemo_query_get_file_pattern (query);
+        content_pattern_to_set = nemo_query_get_content_pattern (query);
     }
 
-    if (!file_pattern) {
-        file_pattern = g_strdup ("");
+    if (!file_pattern_to_set) {
+        file_pattern_to_set = g_strdup ("");
+        free_file_pattern = TRUE;
     }
 
-    if (!content_pattern) {
-        content_pattern = g_strdup ("");
+    if (!content_pattern_to_set) {
+        content_pattern_to_set = g_strdup ("");
+        free_content_pattern = TRUE;
     }
 
 	editor->priv->change_frozen = TRUE;
-    gtk_entry_set_text (GTK_ENTRY (editor->priv->file_entry), file_pattern);
-	gtk_entry_set_text (GTK_ENTRY (editor->priv->content_entry), content_pattern);
+    gtk_entry_set_text (GTK_ENTRY (editor->priv->file_entry), file_pattern_to_set);
+	gtk_entry_set_text (GTK_ENTRY (editor->priv->content_entry), content_pattern_to_set);
     gtk_widget_grab_focus (editor->priv->file_entry);
 
 	g_free (editor->priv->current_uri);
@@ -581,6 +585,13 @@ nemo_query_editor_set_query (NemoQueryEditor	*editor,
 	if (query != NULL) {
 		editor->priv->current_uri = nemo_query_get_location (query);
 	}
+
+    if (free_file_pattern) {
+        g_free (file_pattern_to_set);
+    }
+    if (free_content_pattern) {
+        g_free (content_pattern_to_set);
+    }
 
 	editor->priv->change_frozen = FALSE;
 }
