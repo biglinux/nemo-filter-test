@@ -554,46 +554,52 @@ void
 nemo_query_editor_set_query (NemoQueryEditor	*editor,
 				 NemoQuery		*query)
 {
-    gchar *file_pattern_to_set = NULL;
-    gchar *content_pattern_to_set = NULL;
-    gboolean free_file_pattern = FALSE;
-    gboolean free_content_pattern = FALSE;
+    const gchar *original_file_pattern = NULL;
+    const gchar *original_content_pattern = NULL;
+    gchar *file_pattern_for_entry = NULL;
+    gchar *content_pattern_for_entry = NULL;
+    // For editor->priv->current_uri
+    const gchar *new_current_uri_source = NULL;
 
     if (query != NULL) {
-        file_pattern_to_set = nemo_query_get_file_pattern (query);
-        content_pattern_to_set = nemo_query_get_content_pattern (query);
+        original_file_pattern = nemo_query_get_file_pattern (query);     // Assume borrowed
+        original_content_pattern = nemo_query_get_content_pattern (query); // Assume borrowed
+        new_current_uri_source = nemo_query_get_location (query);        // Assume borrowed or transferred based on later handling
     }
 
-    if (!file_pattern_to_set) {
-        file_pattern_to_set = g_strdup ("");
-        free_file_pattern = TRUE;
+    // Always g_strdup for the entry text. gtk_entry_set_text makes its own copy.
+    if (original_file_pattern != NULL) {
+        file_pattern_for_entry = g_strdup (original_file_pattern);
+    } else {
+        file_pattern_for_entry = g_strdup (""); // This is where Valgrind pointed (line 566)
     }
 
-    if (!content_pattern_to_set) {
-        content_pattern_to_set = g_strdup ("");
-        free_content_pattern = TRUE;
+    if (original_content_pattern != NULL) {
+        content_pattern_for_entry = g_strdup (original_content_pattern);
+    } else {
+        content_pattern_for_entry = g_strdup (""); // This is where Valgrind pointed (line 570)
     }
 
 	editor->priv->change_frozen = TRUE;
-    gtk_entry_set_text (GTK_ENTRY (editor->priv->file_entry), file_pattern_to_set);
-	gtk_entry_set_text (GTK_ENTRY (editor->priv->content_entry), content_pattern_to_set);
+    gtk_entry_set_text (GTK_ENTRY (editor->priv->file_entry), file_pattern_for_entry);
+	gtk_entry_set_text (GTK_ENTRY (editor->priv->content_entry), content_pattern_for_entry);
     gtk_widget_grab_focus (editor->priv->file_entry);
 
-	g_free (editor->priv->current_uri);
-	editor->priv->current_uri = NULL;
-
-	if (query != NULL) {
-		editor->priv->current_uri = nemo_query_get_location (query);
-	}
-
-    if (free_file_pattern) {
-        g_free (file_pattern_to_set);
-    }
-    if (free_content_pattern) {
-        g_free (content_pattern_to_set);
+    // Handling for editor->priv->current_uri
+    // The existing code g_free's editor->priv->current_uri first, which implies it owns the memory.
+    // So, if nemo_query_get_location returns a string, we must g_strdup it.
+    g_free (editor->priv->current_uri);
+    if (new_current_uri_source != NULL) {
+        editor->priv->current_uri = g_strdup(new_current_uri_source);
+    } else {
+        editor->priv->current_uri = NULL;
     }
 
 	editor->priv->change_frozen = FALSE;
+
+    // Now free the g_strdup'd strings used for the entries.
+    g_free (file_pattern_for_entry);
+    g_free (content_pattern_for_entry);
 }
 
 void
