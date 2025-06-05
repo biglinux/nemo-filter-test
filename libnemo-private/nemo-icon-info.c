@@ -318,17 +318,34 @@ nemo_icon_info_lookup (GIcon *icon,
         }
 
         pixbuf = NULL;
+        stream = NULL; // Initialize stream
+        GError *error = NULL; // Declare GError
+
+        // It's good practice to also check if g_loadable_icon_load itself can error out,
+        // though its signature doesn't directly take a GError.
+        // We'll assume it returns NULL on failure for now.
         stream = g_loadable_icon_load (G_LOADABLE_ICON (icon),
-                           size * scale,
-                           NULL, NULL, NULL);
+                                       size * scale,
+                                       NULL, NULL, // For type and cancellable
+                                       NULL);      // GError for g_loadable_icon_load (if it were supported)
 
         if (stream) {
             pixbuf = gdk_pixbuf_new_from_stream_at_scale (stream,
-                                      size * scale, size * scale,
-                                      TRUE,
-                                      NULL, NULL);
-            g_input_stream_close (stream, NULL, NULL);
+                                                          size * scale, size * scale,
+                                                          TRUE,    // preserve_aspect_ratio
+                                                          NULL,    // cancellable
+                                                          &error); // Pass GError
+            if (error) {
+                g_warning("NemoIconInfo: Error loading icon stream for GLoadableIcon (size %d, scale %d): %s",
+                          size, scale, error->message);
+                g_error_free(error);
+                // pixbuf might be NULL or partially loaded, existing fallback will handle NULL pixbuf
+            }
+            // Ensure stream is closed and unreffed even if pixbuf loading failed
+            g_input_stream_close (stream, NULL, NULL); // Ignore close error for simplicity here
             g_object_unref (stream);
+        } else {
+            g_warning("NemoIconInfo: Failed to load stream for GLoadableIcon (size %d, scale %d).", size, scale);
         }
 
         if (!pixbuf) {

@@ -2419,43 +2419,82 @@ update_date_fonts (NemoListView *view)
 {
     g_return_if_fail (NEMO_IS_LIST_VIEW (view));
     NemoDateFontChoice mono_pref;
-    gchar *font_name;
-    PangoStyle date_style;
+    gchar *font_name = NULL;
+    PangoStyle date_style = PANGO_STYLE_NORMAL; // Default
     gchar *date_name = NULL;
     gchar *date_family = NULL;
+    PangoFontDescription *font_desc = NULL;
+    GtkSettings *settings;
+    GList *combined, *l;
 
-    GtkSettings *settings = gtk_settings_get_default ();
-    g_object_get (settings, "gtk-font-name", &font_name, NULL);
+    settings = gtk_settings_get_default ();
+    if (settings) { // Check if settings is not NULL
+        g_object_get (settings, "gtk-font-name", &font_name, NULL);
+    }
+
+    if (!font_name) {
+        g_warning("NemoListView: Could not get default gtk-font-name. Using system default.");
+        // Attempt to use a system default PangoFontDescription if font_name is NULL
+        font_desc = pango_font_description_new(); // Create an empty one
+        if (!font_desc) { // Should not happen with pango_font_description_new
+             g_warning("NemoListView: Could not create new PangoFontDescription. Aborting font update.");
+             return; // Cannot proceed
+        }
+        // font_name is still NULL here, for logic below
+    } else {
+        font_desc = pango_font_description_from_string (font_name);
+        if (!font_desc) {
+            g_warning("NemoListView: Could not create PangoFontDescription from string: %s. Using system default.", font_name);
+            g_free(font_name); // Free font_name if from_string failed
+            font_name = NULL;  // Set to NULL to indicate original name is no longer valid/usable
+            font_desc = pango_font_description_new(); // Create an empty one as fallback
+            if (!font_desc) {
+                 g_warning("NemoListView: Could not create new PangoFontDescription as fallback. Aborting font update.");
+                 return; // Cannot proceed
+            }
+        }
+    }
 
     mono_pref = g_settings_get_enum (nemo_preferences, NEMO_PREFERENCES_DATE_FONT_CHOICE);
 
     if (g_settings_get_enum (nemo_preferences, NEMO_PREFERENCES_DATE_FORMAT) == NEMO_DATE_FORMAT_INFORMAL ||
         mono_pref == NEMO_DATE_FONT_CHOICE_NONE ||
-        g_strstr_len (font_name, -1, "Mono")) {
-        date_name = g_strdup (font_name);
+        (font_name && g_strstr_len (font_name, -1, "Mono"))) {
+        if (font_name) { // Only strdup if font_name is valid
+            date_name = g_strdup (font_name);
+        } else { // Fallback if original font_name was NULL or invalid
+            PangoFontDescription *temp_desc = pango_font_description_new();
+            if (temp_desc) {
+                date_name = pango_font_description_to_string(temp_desc);
+                pango_font_description_free(temp_desc);
+            }
+        }
     } else {
         if (mono_pref == NEMO_DATE_FONT_CHOICE_AUTO) {
-            PangoFontDescription *font_desc = pango_font_description_from_string (font_name);
             const gchar *current_font_family = pango_font_description_get_family (font_desc);
 
             if (current_font_family != NULL) {
                 date_family = nemo_global_preferences_get_mono_font_family_match (current_font_family);
             } else {
-                g_warning ("No font family name set, not using monospace for date columns");
-                date_family = NULL;
+                g_warning ("NemoListView: No font family name set in font_desc, cannot apply NEMO_DATE_FONT_CHOICE_AUTO.");
             }
-
             date_style = pango_font_description_get_style (font_desc);
-
-            pango_font_description_free (font_desc);
-        } else {
+            if (!date_family && font_name) { // Fallback if no matching mono font found
+                 date_name = g_strdup(font_name);
+            } else if (!date_family && !font_name) { // Fallback if original font_name was also NULL
+                PangoFontDescription *temp_desc = pango_font_description_new();
+                if (temp_desc) {
+                    date_name = pango_font_description_to_string(temp_desc);
+                    pango_font_description_free(temp_desc);
+                }
+            }
+        } else { // NEMO_DATE_FONT_CHOICE_MONO_SYSTEM or other future values
             date_name = nemo_global_preferences_get_mono_system_font ();
         }
     }
 
-    GList *combined = g_list_copy (view->details->cells);
+    combined = g_list_copy (view->details->cells);
     combined = g_list_prepend (combined, view->details->file_name_cell);
-    GList *l;
 
     for (l = combined; l != NULL; l = l->next) {
         GtkCellRenderer *cell = GTK_CELL_RENDERER (l->data);
@@ -2467,16 +2506,34 @@ update_date_fonts (NemoListView *view)
                               "family", date_family,
                               "style", date_style,
                               NULL);
-            } else {
+            } else if (date_name) {
                 g_object_set (GTK_CELL_RENDERER_TEXT (cell),
                               "font", date_name,
                               NULL);
+            } else if (font_name) { // Ultimate fallback to original font_name if date_name also failed
+                 g_object_set (GTK_CELL_RENDERER_TEXT (cell),
+                              "font", font_name,
+                              NULL);
+            } else { // Absolute fallback to cell's default if everything else is NULL
+                 PangoFontDescription *default_cell_font_desc = pango_font_description_new();
+                 char* default_cell_font_str = pango_font_description_to_string(default_cell_font_desc);
+                 g_object_set (GTK_CELL_RENDERER_TEXT (cell), "font", default_cell_font_str, NULL);
+                 g_free(default_cell_font_str);
+                 pango_font_description_free(default_cell_font_desc);
             }
         }
-        else {
-            g_object_set (GTK_CELL_RENDERER_TEXT (cell),
-                          "font", font_name,
-                          NULL);
+        else { // Not a date column
+            if (font_name) {
+                g_object_set (GTK_CELL_RENDERER_TEXT (cell),
+                              "font", font_name,
+                              NULL);
+            } else { // Absolute fallback for non-date columns
+                 PangoFontDescription *default_cell_font_desc = pango_font_description_new();
+                 char* default_cell_font_str = pango_font_description_to_string(default_cell_font_desc);
+                 g_object_set (GTK_CELL_RENDERER_TEXT (cell), "font", default_cell_font_str, NULL);
+                 g_free(default_cell_font_str);
+                 pango_font_description_free(default_cell_font_desc);
+            }
         }
     }
 
@@ -2486,6 +2543,9 @@ update_date_fonts (NemoListView *view)
     g_free (font_name);
     g_free (date_family);
     g_free (date_name);
+    if (font_desc) {
+        pango_font_description_free (font_desc);
+    }
 }
 
 static void
