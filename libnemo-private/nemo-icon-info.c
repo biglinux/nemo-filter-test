@@ -188,8 +188,8 @@ reap_old_icon (gpointer  key,
 	gboolean *reapable_icons_left = user_info;
 
 	if (icon->sole_owner) {
-		if (time_now - icon->last_use_time > (gint64)(30 * MICROSEC_PER_SEC)) {
-			/* This went unused 30 secs ago. reap */
+		if (time_now - icon->last_use_time > (gint64)(1 * MICROSEC_PER_SEC)) {
+			/* This went unused 1 sec ago. reap */
 			return TRUE;
 		} else {
 			/* We can reap this soon */
@@ -233,7 +233,7 @@ static void
 schedule_reap_cache (void)
 {
 	if (reap_cache_timeout == 0) {
-		reap_cache_timeout = g_timeout_add_seconds_full (0, 5,
+		reap_cache_timeout = g_timeout_add_full (G_PRIORITY_DEFAULT_IDLE, 100,
 								 reap_cache,
 								 NULL, NULL);
 	}
