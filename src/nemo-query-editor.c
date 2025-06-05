@@ -583,6 +583,10 @@ nemo_query_editor_set_query (NemoQueryEditor	*editor,
 	}
 
 	editor->priv->change_frozen = FALSE;
+
+    // Applied FIX: Free the local string variables
+    g_free (file_pattern);
+    g_free (content_pattern);
 }
 
 void
