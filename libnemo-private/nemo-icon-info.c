@@ -50,14 +50,15 @@ nemo_icon_info_free (NemoIconInfo *icon)
 {
     g_return_if_fail (icon != NULL);
 
-    if (!icon->sole_owner && icon->pixbuf) {
+    if (icon->pixbuf) { // Only proceed if there's a pixbuf
+        // Always attempt to remove a toggle_ref associated with this NemoIconInfo instance.
+        // g_object_remove_toggle_ref is safe to call even if the ref doesn't exist with this context.
         g_object_remove_toggle_ref (G_OBJECT (icon->pixbuf),
                                     pixbuf_toggle_notify,
                                     icon);
-    }
 
-    if (icon->pixbuf) {
-        g_object_unref (icon->pixbuf);
+        g_object_unref (icon->pixbuf); // Then, unref this NemoIconInfo's hold on the pixbuf
+        icon->pixbuf = NULL; // Good practice after unreffing an owned GObject pointer
     }
 
     g_free (icon->icon_name);
