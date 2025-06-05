@@ -33,10 +33,13 @@ pixbuf_toggle_notify (gpointer      info,
               GObject      *object,
               gboolean      is_last_ref)
 {
+    g_message("NII_Cache: pixbuf_toggle_notify: icon_info=%p, pixbuf=%p, is_last_ref=%d", info, object, is_last_ref);
     NemoIconInfo  *icon = info;
 
     if (is_last_ref) {
+        g_message("NII_Cache: pixbuf_toggle_notify: SETTING icon_info=%p sole_owner=TRUE", info);
         icon->sole_owner = TRUE;
+        g_message("NII_Cache: pixbuf_toggle_notify: REMOVING toggle_ref for icon_info=%p, pixbuf=%p", info, object);
         g_object_remove_toggle_ref (object,
                         pixbuf_toggle_notify,
                         info);
@@ -48,9 +51,11 @@ pixbuf_toggle_notify (gpointer      info,
 static void
 nemo_icon_info_free (NemoIconInfo *icon)
 {
+    g_message("NII_Cache: nemo_icon_info_free: icon_info=%p, name=%s, pixbuf=%p, sole_owner=%d, ref_count=%d", icon, icon->icon_name ? icon->icon_name : "(null)", icon->pixbuf, icon->sole_owner, icon->ref_count);
     g_return_if_fail (icon != NULL);
 
     if (!icon->sole_owner && icon->pixbuf) {
+        g_message("NII_Cache: nemo_icon_info_free: REMOVING toggle_ref for icon_info=%p, pixbuf=%p (because not sole_owner)", icon, icon->pixbuf);
         g_object_remove_toggle_ref (G_OBJECT (icon->pixbuf),
                                     pixbuf_toggle_notify,
                                     icon);
@@ -183,12 +188,13 @@ reap_old_icon (gpointer  key,
 	       gpointer  value,
 	       gpointer  user_info)
 {
-	NemoIconInfo *icon = value;
+	NemoIconInfo *icon = value; g_message("NII_Cache: reap_old_icon: CONSIDERING icon_info=%p, name=%s, sole_owner=%d, last_use_time=%lld", icon, icon->icon_name ? icon->icon_name : "(null)", icon->sole_owner, (long long)icon->last_use_time);
 	gboolean *reapable_icons_left = user_info;
 
 	if (icon->sole_owner) {
 		if (time_now - icon->last_use_time > (gint64)(30 * MICROSEC_PER_SEC)) {
 			/* This went unused 30 secs ago. reap */
+			g_message("NII_Cache: reap_old_icon: REAPING icon_info=%p, name=%s", icon, icon->icon_name ? icon->icon_name : "(null)");
 			return TRUE;
 		} else {
 			/* We can reap this soon */
@@ -312,10 +318,13 @@ nemo_icon_info_lookup (GIcon *icon,
         lookup_key.icon = icon;
         lookup_key.size = size;
 
+        g_message("NII_Cache: nemo_icon_info_lookup (Loadable): icon_gicon=%p, size=%d, scale=%d. Attempting loadable_icon_cache lookup.", icon, size, scale);
         icon_info = g_hash_table_lookup (loadable_icon_cache, &lookup_key);
         if (icon_info) {
+            g_message("NII_Cache: nemo_icon_info_lookup (Loadable): CACHE HIT. icon_info=%p, name=%s", icon_info, icon_info->icon_name ? icon_info->icon_name : "(null)");
             return nemo_icon_info_ref (icon_info);
         }
+        g_message("NII_Cache: nemo_icon_info_lookup (Loadable): CACHE MISS. Creating new NemoIconInfo.");
 
         pixbuf = NULL;
         stream = NULL; // Initialize stream
@@ -381,10 +390,13 @@ nemo_icon_info_lookup (GIcon *icon,
         lookup_key.icon = icon;
         lookup_key.size = size;
 
+        g_message("NII_Cache: nemo_icon_info_lookup (Themed): icon_gicon=%p, size=%d, scale=%d. Attempting themed_icon_cache lookup.", icon, size, scale);
         icon_info = g_hash_table_lookup (themed_icon_cache, &lookup_key);
         if (icon_info) {
+            g_message("NII_Cache: nemo_icon_info_lookup (Themed): CACHE HIT. icon_info=%p, name=%s", icon_info, icon_info->icon_name ? icon_info->icon_name : "(null)");
             return nemo_icon_info_ref (icon_info);
         }
+        g_message("NII_Cache: nemo_icon_info_lookup (Themed): CACHE MISS. Creating new NemoIconInfo.");
 
         gtkicon_info = NULL;
 
