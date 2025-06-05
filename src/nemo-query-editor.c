@@ -584,6 +584,7 @@ nemo_query_editor_set_query (NemoQueryEditor	*editor,
 
 	editor->priv->change_frozen = FALSE;
 
+    g_message("NemoQueryEditor: Freeing patterns in set_query: file_pattern=%p, content_pattern=%p", file_pattern, content_pattern);
     // Applied FIX: Free the local string variables
     g_free (file_pattern);
     g_free (content_pattern);
