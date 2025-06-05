@@ -910,8 +910,12 @@ nemo_window_slot_go_up (NemoWindowSlot *slot,
 		}
 	}
 
-	nemo_window_slot_open_location (slot, parent, flags);
-	g_object_unref (parent);
+    // Ensure parent is not NULL before proceeding, though prior logic should ensure this.
+    if (parent != NULL) {
+        nemo_window_slot_open_location (slot, parent, flags);
+        g_clear_object (&parent); // This will unref and set parent to NULL.
+    }
+    // If parent was NULL, the function would have returned earlier or via the explicit check.
 }
 
 void
