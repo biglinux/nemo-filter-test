@@ -856,66 +856,67 @@ nemo_window_slot_go_home (NemoWindowSlot *slot,
 
 void
 nemo_window_slot_go_up (NemoWindowSlot *slot,
-			    NemoWindowOpenFlags flags)
+                        NemoWindowOpenFlags flags)
 {
-	GFile *parent;
-	char * uri;
+    GFile *parent_to_process = NULL; // This will hold the GFile that needs action & unreferencing
 
-	if (slot->location == NULL) {
-		return;
-	}
-
-	parent = g_file_get_parent (slot->location);
-	if (parent == NULL) {
-		if (g_file_has_uri_scheme (slot->location, "smb")) {
-			uri = g_file_get_uri (slot->location);
-
-            DEBUG ("Starting samba URI for navigation: %s", uri);
-
-			if (g_strcmp0 ("smb:///", uri) == 0) {
-				parent = g_file_new_for_uri ("network:///");
-			}
-			else {
-                GString *gstr;
-                char * temp;
-
-                gstr = g_string_new (uri);
-
-				// Remove last /
-                if (g_str_has_suffix (gstr->str, "/")) {
-                    gstr = g_string_set_size (gstr, gstr->len - 1);
-                }
-
-				// Remove last part of string after last remaining /
-				temp = g_strrstr (gstr->str, "/") + 1;
-				if (temp != NULL) {
-                    gstr = g_string_set_size (gstr, temp - gstr->str);
-				}
-
-                // if we're going to end up with smb://, redirect it to network instead.
-                if (g_strcmp0 ("smb://", gstr->str) == 0) {
-                    gstr = g_string_assign (gstr, "network:///");
-                }
-
-                uri = g_string_free (gstr, FALSE);
-
-				parent = g_file_new_for_uri (uri);
-
-                DEBUG ("Ending samba URI for navigation: %s", uri);
-			}
-			g_free (uri);
-		}
-		else {
-			return;
-		}
-	}
-
-    // Ensure parent is not NULL before proceeding, though prior logic should ensure this.
-    if (parent != NULL) {
-        nemo_window_slot_open_location (slot, parent, flags);
-        g_clear_object (&parent); // This will unref and set parent to NULL.
+    if (slot->location == NULL) {
+        return;
     }
-    // If parent was NULL, the function would have returned earlier or via the explicit check.
+
+    // Attempt to get parent directly
+    parent_to_process = g_file_get_parent (slot->location); // Allocation site of the leak
+
+    if (parent_to_process == NULL) {
+        // If direct parent is NULL, try SMB-specific logic
+        if (g_file_has_uri_scheme (slot->location, "smb")) {
+            char *current_uri_str = NULL;
+            GString *gstr_smb_uri = NULL;
+
+            current_uri_str = g_file_get_uri (slot->location);
+            DEBUG ("Starting samba URI for navigation: %s", current_uri_str);
+
+            if (g_strcmp0 ("smb:///", current_uri_str) == 0) {
+                parent_to_process = g_file_new_for_uri ("network:///");
+            } else {
+                gstr_smb_uri = g_string_new (current_uri_str);
+                char *last_slash = g_strrstr(gstr_smb_uri->str, "/");
+
+                // Remove trailing slash for dirname-like behavior, but carefully
+                if (last_slash == (gstr_smb_uri->str + gstr_smb_uri->len - 1) && (last_slash > gstr_smb_uri->str + strlen("smb://"))) {
+                    g_string_truncate(gstr_smb_uri, gstr_smb_uri->len - 1);
+                    last_slash = g_strrstr(gstr_smb_uri->str, "/"); // find new last_slash
+                }
+
+                if (last_slash && (last_slash > gstr_smb_uri->str + strlen("smb://") -1 )) { // Check if slash is part of path, not smb://
+                    g_string_truncate(gstr_smb_uri, last_slash - gstr_smb_uri->str);
+                     // If truncated string is "smb:", "smb:/", or empty after smb scheme, go to root shares
+                    if (gstr_smb_uri->len <= strlen("smb://") || g_strcmp0(gstr_smb_uri->str, "smb:") == 0 || g_strcmp0(gstr_smb_uri->str, "smb:/") == 0) {
+                        g_string_assign(gstr_smb_uri, "smb:///");
+                    }
+                } else { // No further slashes after smb://host, or it's smb:// (which becomes smb:///)
+                    g_string_assign(gstr_smb_uri, "smb:///");
+                }
+
+                if (g_strcmp0 ("smb://", gstr_smb_uri->str) == 0) { // If result of manipulation is "smb://"
+                    g_string_assign (gstr_smb_uri, "network:///");
+                }
+                DEBUG ("Ending samba URI for navigation: %s", gstr_smb_uri->str);
+                parent_to_process = g_file_new_for_uri (gstr_smb_uri->str);
+                g_string_free (gstr_smb_uri, TRUE);
+            }
+            g_free (current_uri_str);
+        } else {
+            // No direct parent, not SMB: nothing to do. parent_to_process is still NULL.
+            return;
+        }
+    }
+
+    // If, after all logic, parent_to_process is set, then use it and unref it.
+    if (parent_to_process != NULL) {
+        nemo_window_slot_open_location (slot, parent_to_process, flags);
+        g_object_unref (parent_to_process);
+    }
 }
 
 void
