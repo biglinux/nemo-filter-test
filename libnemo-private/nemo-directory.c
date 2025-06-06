@@ -178,8 +178,17 @@ nemo_directory_finalize (GObject *object)
 		g_object_unref (directory->details->location);
 	}
 
-	g_assert (directory->details->file_list == NULL);
+	if (directory->details->file_list != NULL) {
+		GList *l;
+		for (l = directory->details->file_list; l != NULL; l = l->next) {
+			NemoFile *file = NEMO_FILE(l->data);
+			g_object_unref(file);
+		}
+		g_list_free(directory->details->file_list);
+		directory->details->file_list = NULL;
+	}
 	g_hash_table_destroy (directory->details->file_hash);
+	directory->details->file_hash = NULL;
 
 	nemo_file_queue_destroy (directory->details->high_priority_queue);
 	nemo_file_queue_destroy (directory->details->low_priority_queue);
