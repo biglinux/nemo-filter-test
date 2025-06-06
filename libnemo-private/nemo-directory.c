@@ -697,8 +697,9 @@ nemo_directory_remove_file (NemoDirectory *directory, NemoFile *file)
 
 	/* Unref if we are monitoring. */
 	if (nemo_directory_is_file_list_monitored (directory)) {
-		nemo_file_unref (file);
+		nemo_file_unref (file); /* For the specific monitor ref */
 	}
+	nemo_file_unref (file); /* For the list/hash ownership */
 }
 
 GList *
