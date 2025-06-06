@@ -1183,12 +1183,25 @@ void
 nemo_icon_canvas_item_set_is_visible (NemoIconCanvasItem       *item,
 					  gboolean                      visible)
 {
-	if (item->details->is_visible == visible)
+	NemoIconCanvasItemDetails *details = item->details;
+
+	if (details->is_visible == visible)
 		return;
 
-	item->details->is_visible = visible;
+	details->is_visible = visible;
 
 	if (!visible) {
+		g_clear_object (&details->pixbuf);
+		if (details->rendered_surface) {
+			cairo_surface_destroy (details->rendered_surface);
+			details->rendered_surface = NULL;
+		}
+		details->rendered_is_highlighted_for_selection = FALSE;
+		details->rendered_is_highlighted_for_drop = FALSE;
+		details->rendered_is_highlighted_for_clipboard = FALSE;
+		details->rendered_is_prelit = FALSE;
+		details->rendered_is_focused = FALSE;
+
 		nemo_icon_canvas_item_invalidate_label (item);
 	}
 }
