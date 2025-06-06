@@ -1305,26 +1305,34 @@ static cairo_surface_t *
 real_map_surface (NemoIconCanvasItem *icon_item)
 {
 	EelCanvas *canvas;
-	GdkPixbuf *temp_pixbuf, *old_pixbuf;
     cairo_surface_t *surface;
+	GdkPixbuf *base_pixbuf;
 
-	temp_pixbuf = icon_item->details->pixbuf;
+	base_pixbuf = icon_item->details->pixbuf;
 	canvas = EEL_CANVAS_ITEM(icon_item)->canvas;
 
-	g_object_ref (temp_pixbuf);
+	if (base_pixbuf == NULL) {
+		return NULL;
+	}
+
+    surface = gdk_cairo_surface_create_from_pixbuf (base_pixbuf,
+                                                    gtk_widget_get_scale_factor (GTK_WIDGET (canvas)),
+                                                    gtk_widget_get_window (GTK_WIDGET (canvas)));
 
 	if (icon_item->details->is_prelit ||
 	    icon_item->details->is_highlighted_for_clipboard) {
-		old_pixbuf = temp_pixbuf;
+		cairo_t *cr = cairo_create (surface);
 
-		temp_pixbuf = eel_create_spotlight_pixbuf (temp_pixbuf);
-		g_object_unref (old_pixbuf);
+		// Draw the original pixbuf onto the surface first (already done by create_from_pixbuf)
+		// For clarity, one might re-draw, but it's not strictly necessary if create_from_pixbuf
+		// already renders the pixbuf content. Assuming it does.
+
+		// Apply a semi-transparent white overlay for spotlight effect
+		cairo_set_source_rgba (cr, 1.0, 1.0, 1.0, 0.2); /* White, 20% opacity */
+		cairo_paint (cr); // Use cairo_paint to cover the whole surface
+
+		cairo_destroy (cr);
 	}
-
-    surface = gdk_cairo_surface_create_from_pixbuf (temp_pixbuf,
-                                                    gtk_widget_get_scale_factor (GTK_WIDGET (canvas)),
-                                                    gtk_widget_get_window (GTK_WIDGET (canvas)));
-    g_object_unref (temp_pixbuf);
 
     return surface;
 }
